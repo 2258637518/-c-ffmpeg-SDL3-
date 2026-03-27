@@ -24,6 +24,7 @@ Renderer::Renderer(MediaState *state)
     this->texture=nullptr;
     this->audio_stream=nullptr;
     this->audio_device=0;
+    this->keepRunning=false;
 }
 Renderer::~Renderer()
 {
@@ -78,10 +79,22 @@ bool Renderer::init()
         return false;
     }
     SDL_BindAudioStream(this->audio_device, this->audio_stream);
-
     return true;
 }
-
+void Renderer::render_audio()
+{
+    if(keepRunning)
+    {
+        return;
+    }
+    keepRunning=true;
+    feed_audio = std::thread([this](){
+        while(keepRunning)
+        {
+            feed_audio_stream();
+        }
+    });
+}
 void Renderer::render_video()
 {
     if(!pending_video_frame)
@@ -156,6 +169,14 @@ void Renderer::feed_audio_stream()
 }
 void Renderer::close()
 {
+    if(keepRunning)
+    {
+        keepRunning=false;
+        if(feed_audio.joinable())
+        {
+            feed_audio.join();
+        }
+    }
     if(pending_video_frame) { av_frame_free(&pending_video_frame); pending_video_frame = nullptr; }
     if(audio_stream) { SDL_DestroyAudioStream(this->audio_stream); this->audio_stream = nullptr; }
     if(audio_device) { SDL_CloseAudioDevice(this->audio_device); this->audio_device = 0; }

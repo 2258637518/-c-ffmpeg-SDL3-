@@ -1,8 +1,6 @@
 #pragma once
 #include "media_state.h"
 #include<thread>
-#include<string>
-#include<map>
 
 class Demuxer{
     private:

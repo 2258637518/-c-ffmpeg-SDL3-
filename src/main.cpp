@@ -27,10 +27,10 @@ int main(int argc, char* argv[]) {
     demuxer.start();
     audio_decoder.start();
     video_decoder.start();
+    renderer.render_audio();
     while(!renderer.should_quit())
     {
         renderer.render_video();
-        renderer.feed_audio_stream();
         SDL_Delay(2);
     }
     video_decoder.stop();

@@ -2,7 +2,6 @@
 #include "media_state.h"
 #include <cstddef>
 #include<iostream>
-#include <ratio>
 #include <thread>
 extern "C"
 {
