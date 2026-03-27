@@ -31,7 +31,10 @@ int main(int argc, char* argv[]) {
     while(!renderer.should_quit())
     {
         renderer.render_video();
+<<<<<<< HEAD
         SDL_Delay(2);
+=======
+>>>>>>> 65e2bd8 (独立音频解码线程,音视频同步效果改进)
     }
     video_decoder.stop();
     audio_decoder.stop();
