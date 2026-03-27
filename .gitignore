@@ -1,0 +1,15 @@
+# 忽略 CMake 生成的构建目录
+build/
+out/
+
+# 忽略编译产生的可执行文件和中间文件
+*.exe
+*.o
+*.obj
+*.dll
+
+# 忽略 VS Code 的本地配置（可选）
+.vscode/
+
+# 忽略 clangd 代码提示的缓存文件夹
+.cache/
