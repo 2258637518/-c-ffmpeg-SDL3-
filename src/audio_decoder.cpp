@@ -9,7 +9,7 @@ extern "C"
 }
 
 AudioDecoder::AudioDecoder(MediaState *state, int stream_idx)
-    : Decoder(state, stream_idx)
+    : Decoder(state, stream_idx), swr_ctx(nullptr)
 {
 }
 

@@ -41,6 +41,9 @@ set(SOURCES
     src/video_decoder.cpp
     src/audio_decoder.cpp
     src/renderer.cpp
+    src/audio_output.cpp
+    src/syncmanager.cpp
+    src/player.cpp
 )
 
 # ==========================================
