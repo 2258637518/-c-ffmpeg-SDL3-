@@ -16,6 +16,7 @@ private:
     AVFrame *pending_video_frame = nullptr;
     SyncManager sync_manager;
     std::atomic<bool> keepRunning;
+    double user_provide_pts;
 public:
     Renderer(MediaState *state);
     ~Renderer();

@@ -1,6 +1,7 @@
 #include "renderer.h"
 
 #include "media_state.h"
+#include "player.h"
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_oldnames.h>
@@ -22,6 +23,7 @@ Renderer::Renderer(MediaState *state)
     this->renderer=nullptr;
     this->texture=nullptr;
     this->keepRunning=false;
+    this->user_provide_pts=0.0;
 }
 Renderer::~Renderer()
 {
@@ -79,7 +81,7 @@ void Renderer::render_video(double current_audio_delay)
     
     double video_pts=pending_video_frame->pts*av_q2d(state->video_time_base);
     double logical_audio_pts=state->audio_clock.get_clock();
-    double real_audio_pts = logical_audio_pts-current_audio_delay;
+    double real_audio_pts = logical_audio_pts-current_audio_delay+user_provide_pts;
     SyncDecision decision = sync_manager.decide_video_frame(video_pts, real_audio_pts);
     
     if(decision.action == SyncAction::Wait)
@@ -121,6 +123,25 @@ bool Renderer::should_quit()
         if(event.type==SDL_EVENT_QUIT)
         {
             return true;
+        }
+        else if(event.type == SDL_EVENT_KEY_DOWN)
+        {
+            if (event.key.key == SDLK_J) {
+                user_provide_pts -= 0.05; 
+            }
+            else if (event.key.key == SDLK_K) {
+                user_provide_pts += 0.05;
+            }
+            else if (event.key.key == SDLK_SPACE) {
+                if(state->state==PlayState::PLAYING)
+                {
+                    state->state=PlayState::PAUSE;
+                }
+                else if(state->state==PlayState::PAUSE)
+                {
+                    state->state=PlayState::PLAYING;
+                }
+            }
         }
     }
     return false;

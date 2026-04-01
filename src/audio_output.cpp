@@ -75,6 +75,10 @@ void AudioOutput::feed_audio_loop()
     while(keepRunning)
     {
         if(!audio_stream)break;
+        if (state->state == PlayState::PAUSE) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
         if(SDL_GetAudioStreamQueued(audio_stream)>32768)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -104,4 +108,16 @@ double AudioOutput::get_audio_delay()
 {
     int queued_bytes=SDL_GetAudioStreamQueued(audio_stream);
     return (double)queued_bytes/352800.0;
+}
+void AudioOutput::set_pause(bool is_pause)
+{
+    if(is_pause)
+    {
+        SDL_PauseAudioDevice(audio_device);
+    }
+    else {
+    {
+        SDL_ResumeAudioDevice(audio_device);
+    }
+    }
 }

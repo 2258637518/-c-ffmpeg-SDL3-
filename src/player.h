@@ -25,7 +25,7 @@ private:
     AudioOutput audio_output;
     std::unique_ptr<AudioDecoder> audio_decoder;
     std::unique_ptr<VideoDecoder> video_decoder;
-
+    PlayState last_state = PlayState::STOPPED;
     bool opened = false;
     bool started = false;
     bool quit=false;

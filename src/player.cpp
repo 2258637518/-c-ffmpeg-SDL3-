@@ -1,4 +1,6 @@
 #include "player.h"
+#include "media_state.h"
+#include <SDL3/SDL_timer.h>
 
 Player::Player(const std::string& filepath)
     : state(filepath),
@@ -49,6 +51,27 @@ void Player::tick()
 
     if (renderer.should_quit()) {
         quit = true;
+        return;
+    }
+    if(state.state!=last_state)
+    {
+        if(state.state == PlayState::PLAYING)
+        {
+            audio_output.set_pause(false);
+            state.audio_clock.set_paused(false);
+            state.video_clock.set_paused(false);
+        }
+        else if(state.state == PlayState::PAUSE)
+        {
+            audio_output.set_pause(true);
+            state.audio_clock.set_paused(true);
+            state.video_clock.set_paused(true);
+        }
+        last_state=state.state;
+    }
+    if(state.state==PlayState::PAUSE)
+    {
+        SDL_Delay(10);
         return;
     }
     double hw_delay=audio_output.get_audio_delay();

@@ -1,7 +1,6 @@
 #pragma once
 #include "media_state.h"
 #include <SDL3/SDL_audio.h>
-#include <mutex>
 #include <atomic>
 #include <thread>
 class AudioOutput{
@@ -20,5 +19,6 @@ public:
     void start();
     void stop();
     void close();
+    void set_pause(bool is_pause);
     double get_audio_delay();
 };
