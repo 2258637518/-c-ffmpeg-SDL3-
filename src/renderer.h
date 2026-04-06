@@ -5,6 +5,7 @@
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_render.h>
 #include <SDL3/SDL_video.h>
+#include <cstdint>
 #include <thread>
 #include <atomic>
 class Renderer{
@@ -17,6 +18,8 @@ private:
     SyncManager sync_manager;
     std::atomic<bool> keepRunning;
     double user_provide_pts;
+    void execute_seek(int64_t target_pos);
+    void draw_progress_bar();
 public:
     Renderer(MediaState *state);
     ~Renderer();

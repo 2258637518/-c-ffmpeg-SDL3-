@@ -1,6 +1,7 @@
 #include "demuxer.h"
 #include "media_state.h"
 #include <cstddef>
+#include <cstdint>
 #include<iostream>
 #include <thread>
 extern "C"
@@ -101,6 +102,29 @@ void Demuxer::read_thread_loop()
 {
     while(running)
     {
+        //处理seek意图
+        if(state->seek_req.load())
+        {
+            int64_t seek_target=state->seek_pos.load();
+            avformat_seek_file(state->fmt_ctx, -1, INT64_MIN,seek_target, INT64_MAX, AVSEEK_FLAG_BACKWARD);
+            state->seek_req.store(false);
+            state->video_pkt_queue.flush([](AVPacket* &pkt){
+                av_packet_free(&pkt);
+            });
+            state->audio_pkt_queue.flush([](AVPacket* &pkt){
+                av_packet_free(&pkt);
+            });
+            
+            AVPacket *video_flush_pkt = av_packet_alloc();
+            video_flush_pkt->data = (uint8_t*)"FLUSH";
+            video_flush_pkt->size = 5;
+            state->video_pkt_queue.push(video_flush_pkt);
+            
+            AVPacket *a_flush_pkt = av_packet_alloc();
+            a_flush_pkt->data = (uint8_t*)"FLUSH";
+            a_flush_pkt->size = 5;
+            state->audio_pkt_queue.push(a_flush_pkt);
+        }
         // 每次循环必须分配一个新的 packet，因为压入队列后它的所有权就转移给解码器了
         AVPacket *pkt = av_packet_alloc();
         if(av_read_frame(state->fmt_ctx, pkt)>=0)

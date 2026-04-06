@@ -74,6 +74,14 @@ void AudioOutput::feed_audio_loop()
 {
     while(keepRunning)
     {
+        //清空队列
+        if(state->audio_need_clear.exchange(false))
+        {
+            if(audio_stream)
+            {
+                SDL_ClearAudioStream(audio_stream);
+            }
+        }
         if(!audio_stream)break;
         if (state->state == PlayState::PAUSE) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

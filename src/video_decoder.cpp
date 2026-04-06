@@ -37,6 +37,16 @@ void VideoDecoder::decode_thread_loop()
         }
         pkt = state->video_pkt_queue.pop();
         if (!pkt) break;
+        //处理哨兵包
+        if(pkt->data && pkt->size==5&&std::string((char*)pkt->data,5)=="FLUSH")
+        {
+            avcodec_flush_buffers(codec_ctx);
+            state->video_frame_queue.flush([](AVFrame* &f){
+                av_frame_free(&f);
+            });
+            av_packet_free(&pkt);
+            continue;
+        }
         if (avcodec_send_packet(codec_ctx, pkt) == 0)
         {
             while (avcodec_receive_frame(codec_ctx, frame) >= 0)

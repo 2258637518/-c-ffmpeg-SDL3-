@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include<queue>
 #include<mutex>
 #include<condition_variable>
@@ -47,6 +48,16 @@ public:
         {
             T t=q.front();
             av_free(&t);
+            q.pop();
+        }
+    }
+    void flush(std::function<void(T&)> deleter)
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        while(!q.empty())
+        {
+            T t=q.front();
+            if(deleter)deleter(t);
             q.pop();
         }
     }

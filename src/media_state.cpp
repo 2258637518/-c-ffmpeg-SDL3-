@@ -10,7 +10,10 @@ filename(filename),
 state(PlayState::STOPPED),
 fmt_ctx(nullptr),
 video_stream_idx(-1),
-audio_stream_idx(-1)
+audio_stream_idx(-1),
+seek_req(false),
+seek_pos(0),
+audio_need_clear(false)
 {
 }
 MediaState::~MediaState()

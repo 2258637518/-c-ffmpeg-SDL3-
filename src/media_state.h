@@ -1,7 +1,9 @@
 #pragma once
 #include "thread_queue.h"
 #include "media_clock.h"
-#include<string>
+#include <cstdint>
+#include <string>
+#include <atomic>
 extern "C"{
 #include <libavformat/avformat.h>
 #include <libavcodec/packet.h>
@@ -33,6 +35,10 @@ struct MediaState
     MediaClock audio_clock;
     AVRational video_time_base;
     AVRational audio_time_base;
+
+    std::atomic<bool>seek_req;
+    std::atomic<int64_t> seek_pos;
+    std::atomic<bool>audio_need_clear;
 
     MediaState(const std::string &filename);
     ~MediaState();
