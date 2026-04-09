@@ -20,6 +20,9 @@ private:
     double user_provide_pts;
     void execute_seek(int64_t target_pos);
     void draw_progress_bar();
+    bool is_debouncing;
+    int64_t debounce_target_pos;
+    uint64_t last_keypress_time;
 public:
     Renderer(MediaState *state);
     ~Renderer();

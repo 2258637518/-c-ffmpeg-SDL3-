@@ -27,6 +27,9 @@ Renderer::Renderer(MediaState *state)
     this->texture=nullptr;
     this->keepRunning=false;
     this->user_provide_pts=-0.08;
+    this->is_debouncing = false;
+    this->debounce_target_pos = 0;
+    this->last_keypress_time = 0;
 }
 Renderer::~Renderer()
 {
@@ -80,6 +83,20 @@ void Renderer::render_video(double current_audio_delay)
         {
             return;
         }
+        if(state->global_seek_serial.load()!=state->video_decoder_serial.load())
+        {
+            av_frame_free(&pending_video_frame);
+            pending_video_frame=nullptr;
+            return;
+        }
+        double target_sec = (double)state->seek_pos.load()/AV_TIME_BASE;
+        double video_pts = pending_video_frame->pts*av_q2d(state->video_time_base);
+        if(video_pts<target_sec)
+        {
+            av_frame_free(&pending_video_frame);
+            pending_video_frame = nullptr;
+            return;
+        }
     }
     
     double video_pts=pending_video_frame->pts*av_q2d(state->video_time_base);
@@ -89,7 +106,6 @@ void Renderer::render_video(double current_audio_delay)
     
     if(decision.action == SyncAction::Wait)
     {
-        // Must sleep to avoid 100% CPU usage
         SDL_Delay(1);
         return;
     }
@@ -148,29 +164,24 @@ bool Renderer::should_quit()
             }
             else if(event.key.key == SDLK_RIGHT)
             {
-               double target_sec = 0.0;
-                if (state->seek_req.load()) {
-                    // 底层还没处理完，直接基于上一次定下的目标时间继续累加
-                    target_sec = (double)state->seek_pos.load() / AV_TIME_BASE + 5.0;
-                } else {
-                    // 底层是正常状态，基于现在的播放进度去加
-                    target_sec = state->audio_clock.get_clock() + 5.0;
+                if(!is_debouncing)
+                {
+                    debounce_target_pos = (int64_t)(state->audio_clock.get_clock()*AV_TIME_BASE);
+                    is_debouncing = true;
                 }
-                execute_seek((int64_t)(target_sec * AV_TIME_BASE));
+                debounce_target_pos +=5LL*AV_TIME_BASE;
+                last_keypress_time = SDL_GetTicks();
             }
             else if(event.key.key == SDLK_LEFT)
             {
-                double target_sec = 0.0;
-                if (state->seek_req.load()) {
-                    target_sec = (double)state->seek_pos.load() / AV_TIME_BASE - 5.0;
-                } else {
-                    target_sec = state->audio_clock.get_clock() - 5.0;
-                }
-                if(target_sec<0.0)
+                if(!is_debouncing)
                 {
-                    target_sec=0.0; 
+                    debounce_target_pos = (int64_t)(state->audio_clock.get_clock()*AV_TIME_BASE);
+                    is_debouncing = true;
                 }
-                execute_seek((int64_t)(target_sec * AV_TIME_BASE));
+                debounce_target_pos -= 5LL * AV_TIME_BASE;
+                if(debounce_target_pos < 0) debounce_target_pos = 0;
+                last_keypress_time = SDL_GetTicks();
             }
         }
         else if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
@@ -189,16 +200,29 @@ bool Renderer::should_quit()
            
         }
     }
+    if (is_debouncing && (SDL_GetTicks() - last_keypress_time > 200)) 
+    {
+    execute_seek(debounce_target_pos);
+    is_debouncing = false;
+    }
     return false;
 }
 void Renderer::execute_seek(int64_t target_pos)
 {
+    state->global_seek_serial++;
+    double target_sec = (double)target_pos / AV_TIME_BASE;
+    // 不管现在几点了，强行把声音和视频的参考时钟拨回你希望它去的值
+    state->audio_clock.set_clock(target_sec);
+    state->video_clock.set_clock(target_sec);
      // 告知需要跳转的位置和发起跳转请求
     state->seek_pos = target_pos;
     state->seek_req = true;
     // 清空声音残留
     state->audio_need_clear = true;
     
+    state->video_frame_queue.flush([](AVFrame* &f){ av_frame_free(&f); });
+    state->audio_frame_queue.flush([](AVFrame* &f){ av_frame_free(&f); });
+
     // 清空由于延迟遗留在此处的旧视频画面
     if (pending_video_frame) {
         av_frame_free(&pending_video_frame);
@@ -215,7 +239,9 @@ void Renderer::draw_progress_bar()
     SDL_RenderFillRect(renderer, &bg_rect);
 
     double duration_sec = (double)state->fmt_ctx->duration/AV_TIME_BASE;
-    double current_sec = state->audio_clock.get_clock();
+    double current_sec = is_debouncing 
+            ? ((double)debounce_target_pos / AV_TIME_BASE) 
+            : state->audio_clock.get_clock();
     float progress = (float)((current_sec/duration_sec)*w);
     SDL_FRect fg_rect = {0.0f,(float)(h-30),progress,30.0f};
     SDL_SetRenderDrawColor(renderer, 255, 100, 100, 255);

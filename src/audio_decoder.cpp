@@ -39,6 +39,7 @@ void AudioDecoder::decode_thread_loop()
             state->audio_frame_queue.flush([](AVFrame* &f){
                 av_frame_free(&f);
             });
+            state->audio_decoder_serial = state->global_seek_serial.load();
             av_packet_free(&pkt);
             continue;
         }

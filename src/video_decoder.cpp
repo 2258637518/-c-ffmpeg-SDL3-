@@ -44,6 +44,7 @@ void VideoDecoder::decode_thread_loop()
             state->video_frame_queue.flush([](AVFrame* &f){
                 av_frame_free(&f);
             });
+            state->video_decoder_serial = state->global_seek_serial.load(); 
             av_packet_free(&pkt);
             continue;
         }

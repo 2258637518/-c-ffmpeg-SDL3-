@@ -40,6 +40,10 @@ struct MediaState
     std::atomic<int64_t> seek_pos;
     std::atomic<bool>audio_need_clear;
 
+    std::atomic<int> global_seek_serial{0};
+    std::atomic<int> video_decoder_serial{0};
+    std::atomic<int> audio_decoder_serial{0};
+
     MediaState(const std::string &filename);
     ~MediaState();
 };

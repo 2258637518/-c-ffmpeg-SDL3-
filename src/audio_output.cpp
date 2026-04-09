@@ -99,9 +99,19 @@ void AudioOutput::feed_audio_loop()
         }
         AVFrame *frame=state->audio_frame_queue.pop();
         if(!frame)continue;
+        if (state->global_seek_serial.load() != state->audio_decoder_serial.load()) {
+            av_frame_free(&frame);
+            continue;
+        }
         if(frame->pts!=AV_NOPTS_VALUE)
         {
             double pts=frame->pts*av_q2d(state->audio_time_base);
+            double target_sec = (double)state->seek_pos.load()/AV_TIME_BASE;
+            if(pts<target_sec)
+            {
+                av_frame_free(&frame);
+                continue;
+            }
             state->audio_clock.set_clock(pts);
         }
         int data_size = av_samples_get_buffer_size(nullptr, frame->ch_layout.nb_channels, frame->nb_samples,  (AVSampleFormat)frame->format, 1);
