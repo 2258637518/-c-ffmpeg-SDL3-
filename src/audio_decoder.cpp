@@ -39,7 +39,9 @@ void AudioDecoder::decode_thread_loop()
             state->audio_frame_queue.flush([](AVFrame* &f){
                 av_frame_free(&f);
             });
+            filter.flush(codec_ctx, state->audio_time_base);
             state->audio_decoder_serial = state->global_seek_serial.load();
+            current_source_sec = -1.0;
             av_packet_free(&pkt);
             continue;
         }
@@ -47,40 +49,71 @@ void AudioDecoder::decode_thread_loop()
         {
             while (avcodec_receive_frame(codec_ctx, frame) >= 0)
             {
-                // 1. 分配重采样后的输出帧
-                AVFrame *out_frame = av_frame_alloc();
-                out_frame->format = AV_SAMPLE_FMT_FLT;
-                av_channel_layout_default(&out_frame->ch_layout, 2);
-                out_frame->sample_rate = 44100;
-                out_frame->pts = frame->pts;
-                
-                // 2. 计算输出样本数并分配内存缓冲区
-                int out_nb_samples = swr_get_out_samples(swr_ctx, frame->nb_samples);
-                out_frame->nb_samples = out_nb_samples;
-                av_frame_get_buffer(out_frame, 0);
-
-                // 3. 执行重采样转换
-                int ret = swr_convert(swr_ctx,
-                                      out_frame->data, out_frame->nb_samples,
-                                      (const uint8_t **)frame->data, frame->nb_samples);
-                
-                if (ret > 0)
-                {
-                    // 修正实际输出的样本数
-                    out_frame->nb_samples = ret;
-                    state->audio_frame_queue.push(out_frame);
+                if (current_source_sec < 0 && frame->pts != AV_NOPTS_VALUE) {
+                    current_source_sec = frame->pts * av_q2d(state->audio_time_base);
                 }
-                else
+                filter.set_speed(state->player_speed.load());
+                if (filter.add_frame(frame) >= 0)
                 {
-                    av_frame_free(&out_frame);
+                    AVFrame *filter_frame = av_frame_alloc();
+                    // 循环从滤镜中获取所有处理好的帧
+                    while (filter.get_frame(filter_frame) >= 0)
+                    {
+                        resample_and_push(filter_frame);
+                        // 滤镜帧交给下游后，解除当前数据块引用，以便接下一帧数据
+                        av_frame_unref(filter_frame);
+                    }
+                    av_frame_free(&filter_frame);
                 }
-                // 每解码并处理完一帧后取消引用，以便复用 frame 对象
+                // 原始解码出的 frame 送给滤镜后，解除引用
                 av_frame_unref(frame);
             }
         }
         av_packet_free(&pkt);
     }
     if (frame) av_frame_free(&frame);
+}
+
+void AudioDecoder::resample_and_push(AVFrame *in_frame)
+{
+    // 1. 分配重采样后的输出帧
+    AVFrame *out_frame = av_frame_alloc();
+    out_frame->format = AV_SAMPLE_FMT_FLT;
+    av_channel_layout_default(&out_frame->ch_layout, 2);
+    out_frame->sample_rate = 44100;
+
+    // 重大修复：基于实际消耗的源时长完美投影正确的 PTS
+    if (current_source_sec >= 0) {
+        // 输出帧被挂载上理论上绝对正确的源时间刻度
+        out_frame->pts = current_source_sec / av_q2d(state->audio_time_base);
+        // 本次输出帧所代表的原始时长 = (输出样本数 / 采样率) * 当前倍速
+        double source_duration = (in_frame->nb_samples / (double)in_frame->sample_rate) * state->player_speed.load();
+        // 累积到下一次
+        current_source_sec += source_duration;
+    } else {
+        out_frame->pts = av_rescale_q(in_frame->pts, filter.get_out_time_base(), state->audio_time_base);
+    }
+    
+    // 2. 计算输出样本数并分配内存缓冲区
+    int out_nb_samples = swr_get_out_samples(swr_ctx, in_frame->nb_samples);
+    out_frame->nb_samples = out_nb_samples;
+    av_frame_get_buffer(out_frame, 0);
+
+    // 3. 执行重采样转换
+    int ret = swr_convert(swr_ctx,
+                          out_frame->data, out_frame->nb_samples,
+                          (const uint8_t **)in_frame->extended_data, in_frame->nb_samples);
+    
+    if (ret > 0)
+    {
+        // 修正实际输出的样本数
+        out_frame->nb_samples = ret;
+        state->audio_frame_queue.push(out_frame);
+    }
+    else
+    {
+        av_frame_free(&out_frame);
+    }
 }
 
 bool AudioDecoder::open()
@@ -110,6 +143,8 @@ bool AudioDecoder::open()
     if (ret < 0) {
         return false;
     }
+
+    filter.init(codec_ctx, state->audio_time_base);
 
     return swr_init(swr_ctx) >= 0;
 }

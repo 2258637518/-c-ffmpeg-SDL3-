@@ -72,8 +72,19 @@ void AudioOutput::close()
 }
 void AudioOutput::feed_audio_loop()
 {
+   int last_volume = -1; 
+   
     while(keepRunning)
     {
+        // 1. 读取一次原子变量（读取的代价极低）
+        int current_volume = state->audio_volume.load();
+        
+        // 2. 只有当发现音量发生变化时（脏数据），才去真正地调底层去执行！
+        if (current_volume != last_volume)
+        {
+            set_volume(current_volume);
+            last_volume = current_volume; // 更新记忆册
+        }
         //清空队列
         if(state->audio_need_clear.exchange(false))
         {
@@ -138,4 +149,9 @@ void AudioOutput::set_pause(bool is_pause)
         SDL_ResumeAudioDevice(audio_device);
     }
     }
+}
+void AudioOutput::set_volume(int v)
+{
+    float gain = v / 100.0f; 
+    SDL_SetAudioStreamGain(this->audio_stream, gain);
 }

@@ -18,6 +18,8 @@ public:
 
     bool should_quit();
 
+    static bool sdl_event_watch(void* userdata, union SDL_Event* event);
+
 private:
     MediaState state;
     Demuxer demuxer;

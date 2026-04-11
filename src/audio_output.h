@@ -21,4 +21,5 @@ public:
     void close();
     void set_pause(bool is_pause);
     double get_audio_delay();
+    void set_volume(int v);
 };

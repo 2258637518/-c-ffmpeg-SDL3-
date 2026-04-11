@@ -21,6 +21,7 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
     libavutil
     libswscale    # 用于视频像素格式转换
     libswresample # 用于音频重采样
+    libavfilter   # 用于引入我们新加入的滤镜库
 )
 
 # ==========================================
@@ -40,15 +41,20 @@ set(SOURCES
     src/decoder.cpp
     src/video_decoder.cpp
     src/audio_decoder.cpp
+    src/audio_filter.cpp
     src/renderer.cpp
     src/audio_output.cpp
     src/syncmanager.cpp
     src/player.cpp
 )
 
+# 全局添加宏定义（写在 add_executable 之前）
+add_definitions(-D__STDC_CONSTANT_MACROS)
+
 # ==========================================
 # 4. 创建可执行文件并链接
 # ==========================================
+
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # 指定头文件搜索路径，这样在代码里可以直接 #include "media_state.h"
@@ -64,3 +70,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 # （可选）开启更多的编译警告，帮助提前发现潜在的 Bug
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
+
+

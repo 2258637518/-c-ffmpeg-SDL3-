@@ -25,7 +25,7 @@ public:
         pts=new_pts;
         last_updata=get_system_time();
     }
-    double get_clock()
+    double get_clock(double speed = 1.0)
     {
         std::lock_guard<std::mutex>lock(mtx);
         if(is_paused)
@@ -33,7 +33,7 @@ public:
             return pts;
         }
         double time_diff=get_system_time()-last_updata;
-        return pts+time_diff;
+        return pts + time_diff * speed;
     }
     void set_paused(bool paused)
     {

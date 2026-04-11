@@ -1,5 +1,5 @@
 #include "renderer.h"
-
+#include <iostream>
 #include "media_state.h"
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
@@ -100,8 +100,10 @@ void Renderer::render_video(double current_audio_delay)
     }
     
     double video_pts=pending_video_frame->pts*av_q2d(state->video_time_base);
-    double logical_audio_pts=state->audio_clock.get_clock();
-    double real_audio_pts = logical_audio_pts-current_audio_delay+user_provide_pts;
+    double current_speed = state->player_speed.load();
+    double logical_audio_pts=state->audio_clock.get_clock(current_speed);
+    // 扣除硬件延迟时，必须考虑真实的物理延迟转为逻辑资源的时间
+    double real_audio_pts = logical_audio_pts - current_audio_delay * current_speed + user_provide_pts;
     SyncDecision decision = sync_manager.decide_video_frame(video_pts, real_audio_pts);
     
     if(decision.action == SyncAction::Wait)
@@ -116,8 +118,22 @@ void Renderer::render_video(double current_audio_delay)
         return;
     }
     SDL_UpdateYUVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1],pending_video_frame->linesize[1] ,pending_video_frame->data[2] ,pending_video_frame->linesize[2] );
+    
+    int win_w,win_h;
+    SDL_GetRenderOutputSize(renderer,&win_w,&win_h);
+    int frame_w = pending_video_frame->width;
+    int frame_h = pending_video_frame->height;
+    float scale_x = (float)win_w/(float)frame_w;
+    float scale_y = (float)win_h/(float)frame_h;
+    float scale = (scale_x<scale_y)?scale_x:scale_y;
+    float dest_w = frame_w*scale;
+    float dest_h = frame_h*scale;
+    float dest_x = (win_w - dest_w)/2.0f;
+    float dest_y = (win_h - dest_h)/2.0f;
+    SDL_FRect dest_rect = {dest_x,dest_y,dest_w,dest_h};
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 100);
     SDL_RenderClear(renderer);
-    SDL_RenderTexture(renderer, texture, NULL, NULL);
+    SDL_RenderTexture(renderer, texture, NULL, &dest_rect);
     draw_progress_bar();
     SDL_RenderPresent(renderer);
     av_frame_free(&pending_video_frame);
@@ -183,6 +199,43 @@ bool Renderer::should_quit()
                 if(debounce_target_pos < 0) debounce_target_pos = 0;
                 last_keypress_time = SDL_GetTicks();
             }
+            else if(event.key.key == SDLK_UP)
+            {
+                state->audio_volume +=5;
+                if(state->audio_volume>100)
+                {
+                    state->audio_volume=100;
+                }
+                else if(state->audio_volume<0)
+                {
+                    state->audio_volume=0;
+                }
+                std::cout<<"当前音量:"<<state->audio_volume<<"%"<<std::endl;
+                
+            }
+            else if(event.key.key == SDLK_DOWN)
+            {
+                state->audio_volume -=5;
+                if(state->audio_volume>100)
+                {
+                    state->audio_volume=100;
+                }
+                else if(state->audio_volume<0)
+                {
+                    state->audio_volume=0;
+                }
+                std::cout<<"当前音量:"<<state->audio_volume<<"%"<<std::endl;
+            }
+            else if(event.key.key == SDLK_LEFTBRACKET)
+            {
+                double cur = state->player_speed.load();
+                state->player_speed.store(cur-0.5);
+            }
+            else if(event.key.key == SDLK_RIGHTBRACKET)
+            {
+                double cur = state->player_speed.load();
+                state->player_speed.store(cur+0.5);
+            }
         }
         else if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
         {
@@ -197,7 +250,6 @@ bool Renderer::should_quit()
                     execute_seek(target_pos);
                 }
             }
-           
         }
     }
     if (is_debouncing && (SDL_GetTicks() - last_keypress_time > 200)) 
@@ -211,7 +263,7 @@ void Renderer::execute_seek(int64_t target_pos)
 {
     state->global_seek_serial++;
     double target_sec = (double)target_pos / AV_TIME_BASE;
-    // 不管现在几点了，强行把声音和视频的参考时钟拨回你希望它去的值
+
     state->audio_clock.set_clock(target_sec);
     state->video_clock.set_clock(target_sec);
      // 告知需要跳转的位置和发起跳转请求

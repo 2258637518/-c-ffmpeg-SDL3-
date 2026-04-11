@@ -1,6 +1,22 @@
 #include "player.h"
 #include "media_state.h"
 #include <SDL3/SDL_timer.h>
+#include <SDL3/SDL_events.h>
+
+bool Player::sdl_event_watch(void* userdata, SDL_Event* event) {
+    if (event->type == SDL_EVENT_WINDOW_EXPOSED || 
+        event->type == SDL_EVENT_WINDOW_RESIZED || 
+        event->type == SDL_EVENT_WINDOW_MOVED) {
+        
+        Player* player = static_cast<Player*>(userdata);
+        if (player && player->started && !player->quit && player->state.state == PlayState::PLAYING) {
+            // 系统正在阻塞主线程处理拖拽，我们强插一帧渲染
+            double hw_delay = player->audio_output.get_audio_delay();
+            player->renderer.render_video(hw_delay);
+        }
+    }
+    return true;
+}
 
 Player::Player(const std::string& filepath)
     : state(filepath),
@@ -29,6 +45,9 @@ bool Player::open()
     if(!video_decoder->open())return false;
     if(!renderer.init())return false;
     if(!audio_output.init())return false;
+    
+    SDL_AddEventWatch(sdl_event_watch, this);
+    
     state.state = PlayState::STOPPED;
     opened = true;
     return true;
@@ -90,6 +109,8 @@ void Player::stop()
     demuxer.stop();
     audio_output.close();
     renderer.close();
+
+    SDL_RemoveEventWatch(sdl_event_watch, this);
 
     state.state = PlayState::STOPPED;
     started = false;

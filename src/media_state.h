@@ -44,6 +44,10 @@ struct MediaState
     std::atomic<int> video_decoder_serial{0};
     std::atomic<int> audio_decoder_serial{0};
 
+    std::atomic<int> audio_volume{100};
+
+    std::atomic<double> player_speed{1.0};
+
     MediaState(const std::string &filename);
     ~MediaState();
 };
