@@ -35,12 +35,15 @@ bool Decoder::open()
     {
         return false;
     }
+
+    
     this->codec_ctx = avcodec_alloc_context3(codec);
     if (avcodec_parameters_to_context(codec_ctx, codec_par) < 0)
     {
         avcodec_free_context(&this->codec_ctx);
         return false;
     }
+    pre_codec_open(codec);
     if (avcodec_open2(codec_ctx, codec, NULL) < 0)
     {
         avcodec_free_context(&this->codec_ctx);

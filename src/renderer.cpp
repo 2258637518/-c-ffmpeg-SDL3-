@@ -41,14 +41,17 @@ bool Renderer::init()
     {
         return false;
     }
-    int video_w = 1600;
-    int video_h = 900;
-    if (state->video_stream_idx >= 0) {
-        AVCodecParameters *codec_par = state->fmt_ctx->streams[state->video_stream_idx]->codecpar;
-        video_w = codec_par->width;
-        video_h = codec_par->height;
-    }
-    this->window=SDL_CreateWindow("my_video_player", video_w, video_h, SDL_WINDOW_RESIZABLE);
+    int window_w = 1600;
+    int window_h = 900;
+    
+    int texture_w = 1920; 
+    int texture_h = 1080;
+    // if (state->video_stream_idx >= 0) {
+    //     AVCodecParameters *codec_par = state->fmt_ctx->streams[state->video_stream_idx]->codecpar;
+    //     texture_w = codec_par->width;
+    //     texture_h = codec_par->height;
+    // }
+    this->window=SDL_CreateWindow("my_video_player", window_w, window_h, SDL_WINDOW_RESIZABLE);
     if(!window)
     {
         this->close();
@@ -61,7 +64,7 @@ bool Renderer::init()
         return false;
     }
     // Texture 必须与视频解码出的一帧大小完全一致
-    this->texture=SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, video_w, video_h);
+    this->texture=SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, texture_w, texture_h);
     if(!texture)
     {
         this->close();

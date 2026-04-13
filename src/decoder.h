@@ -1,5 +1,6 @@
 #pragma once
 #include "media_state.h"
+#include <libavcodec/codec.h>
 #include <thread>
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -16,7 +17,7 @@ public:
 
 protected:
     virtual void decode_thread_loop() = 0;
-
+    virtual void pre_codec_open(const AVCodec* codec){}
     MediaState *state;
     int stream_idx;
     AVCodecContext *codec_ctx;

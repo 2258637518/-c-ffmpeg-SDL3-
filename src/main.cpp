@@ -4,7 +4,7 @@ int main(int argc, char* argv[])
     (void)argc;
     (void)argv;
 
-    const std::string filepath = "/home/gloomybunny/video/GTA6_Trailer2.mp4";
+    const std::string filepath = "/home/gloomybunny/video/test.mp4";
 
     Player player(filepath);
     if (!player.open()) {

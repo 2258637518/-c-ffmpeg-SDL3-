@@ -37,14 +37,22 @@ Player::~Player()
 bool Player::open()
 {
     if(opened)return true;
-    if(!demuxer.open())return false;
+    if(!demuxer.open()) return false;
     demuxer.print_metadata();
-    audio_decoder = std::make_unique<AudioDecoder>(&state,state.audio_stream_idx);
-    video_decoder = std::make_unique<VideoDecoder>(&state,state.video_stream_idx);
-    if(!audio_decoder->open())return false;
-    if(!video_decoder->open())return false;
-    if(!renderer.init())return false;
-    if(!audio_output.init())return false;
+
+    if(!renderer.init()) return false;
+    
+    if(state.audio_stream_idx >= 0) {
+        audio_decoder = std::make_unique<AudioDecoder>(&state, state.audio_stream_idx);
+        if(!audio_decoder->open()) return false;
+        if(!audio_output.init()) return false;
+    }
+
+    if(state.video_stream_idx >= 0) {
+        video_decoder = std::make_unique<VideoDecoder>(&state, state.video_stream_idx);
+        if(!video_decoder->open()) return false;
+    }
+
     
     SDL_AddEventWatch(sdl_event_watch, this);
     
@@ -57,8 +65,8 @@ void Player::start()
       if (!opened || started) return;
 
     demuxer.start();
-    audio_decoder->start();
-    video_decoder->start();
+    if(audio_decoder) audio_decoder->start();
+    if(video_decoder) video_decoder->start();
     audio_output.start();
 
     state.state = PlayState::PLAYING;
