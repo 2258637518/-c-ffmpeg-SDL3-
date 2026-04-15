@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_render.h>
+#include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_video.h>
 #include <cstdint>
 #include <thread>
@@ -23,6 +24,10 @@ private:
     bool is_debouncing;
     int64_t debounce_target_pos;
     uint64_t last_keypress_time;
+    int current_tex_w = 0;
+    int current_tex_h = 0;
+    SDL_PixelFormat current_tex_fmt = SDL_PIXELFORMAT_UNKNOWN;
+    SDL_PixelFormat target_sdl_fmt = SDL_PIXELFORMAT_UNKNOWN;
 public:
     Renderer(MediaState *state);
     ~Renderer();
@@ -31,4 +36,5 @@ public:
     void render_video(double hw_delay);
     void close();
     bool should_quit();
+    bool need_change(AVFrame *pending_video_frame);
 };

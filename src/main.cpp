@@ -4,7 +4,7 @@ int main(int argc, char* argv[])
     (void)argc;
     (void)argv;
 
-    const std::string filepath = "/home/gloomybunny/video/test.mp4";
+    const std::string filepath = "/home/gloomybunny/video/japan_8K.mp4";
 
     Player player(filepath);
     if (!player.open()) {

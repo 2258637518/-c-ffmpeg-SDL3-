@@ -44,13 +44,6 @@ bool Renderer::init()
     int window_w = 1600;
     int window_h = 900;
     
-    int texture_w = 1920; 
-    int texture_h = 1080;
-    // if (state->video_stream_idx >= 0) {
-    //     AVCodecParameters *codec_par = state->fmt_ctx->streams[state->video_stream_idx]->codecpar;
-    //     texture_w = codec_par->width;
-    //     texture_h = codec_par->height;
-    // }
     this->window=SDL_CreateWindow("my_video_player", window_w, window_h, SDL_WINDOW_RESIZABLE);
     if(!window)
     {
@@ -63,13 +56,7 @@ bool Renderer::init()
         this->close();
         return false;
     }
-    // Texture 必须与视频解码出的一帧大小完全一致
-    this->texture=SDL_CreateTexture(this->renderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, texture_w, texture_h);
-    if(!texture)
-    {
-        this->close();
-        return false;
-    }
+    
     return true;
 }
 void Renderer::render_video(double current_audio_delay)
@@ -120,8 +107,25 @@ void Renderer::render_video(double current_audio_delay)
         pending_video_frame = nullptr;
         return;
     }
-    SDL_UpdateYUVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1],pending_video_frame->linesize[1] ,pending_video_frame->data[2] ,pending_video_frame->linesize[2] );
-    
+    if(need_change(pending_video_frame))
+    {
+        texture = SDL_CreateTexture(renderer, target_sdl_fmt, SDL_TEXTUREACCESS_STREAMING, pending_video_frame->width, pending_video_frame->height);
+        current_tex_w = pending_video_frame->width;
+        current_tex_h = pending_video_frame->height;
+        current_tex_fmt = target_sdl_fmt;
+        if(!texture)
+        {
+            return;
+        }
+    }
+    if(pending_video_frame->format==AV_PIX_FMT_YUV420P)
+    {
+        SDL_UpdateYUVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1],pending_video_frame->linesize[1] ,pending_video_frame->data[2] ,pending_video_frame->linesize[2] );
+    }
+    else if(pending_video_frame->format==AV_PIX_FMT_NV12)
+    {
+        SDL_UpdateNVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1], pending_video_frame->linesize[1]);
+    }
     int win_w,win_h;
     SDL_GetRenderOutputSize(renderer,&win_w,&win_h);
     int frame_w = pending_video_frame->width;
@@ -301,4 +305,25 @@ void Renderer::draw_progress_bar()
     SDL_FRect fg_rect = {0.0f,(float)(h-30),progress,30.0f};
     SDL_SetRenderDrawColor(renderer, 255, 100, 100, 255);
     SDL_RenderFillRect(renderer, &fg_rect);
+}
+bool Renderer::need_change(AVFrame *pending_video_frame)
+{
+    if (pending_video_frame->format == AV_PIX_FMT_YUV420P) {
+        target_sdl_fmt = SDL_PIXELFORMAT_IYUV;
+    } 
+    else if (pending_video_frame->format == AV_PIX_FMT_NV12) {
+        target_sdl_fmt = SDL_PIXELFORMAT_NV12;
+    }
+    if(texture==nullptr
+        ||current_tex_w != pending_video_frame->width
+        ||current_tex_h!=pending_video_frame->height
+        ||current_tex_fmt!=target_sdl_fmt)
+    {
+        if(texture!=NULL)
+        {
+            SDL_DestroyTexture(texture);
+        }
+        return true;
+    }
+    return false;
 }

@@ -30,7 +30,17 @@ Decoder::~Decoder()
 bool Decoder::open()
 {
     AVCodecParameters *codec_par = state->fmt_ctx->streams[stream_idx]->codecpar;
-    const AVCodec *codec = avcodec_find_decoder(codec_par->codec_id);
+    const AVCodec *codec = nullptr;
+    
+    if (codec_par->codec_id == AV_CODEC_ID_AV1) 
+    {
+        codec = avcodec_find_decoder_by_name("av1");
+    } 
+    
+    if (!codec) 
+    {
+        codec = avcodec_find_decoder(codec_par->codec_id);
+    }
     if (!codec)
     {
         return false;

@@ -75,24 +75,29 @@ void VideoDecoder::decode_thread_loop()
                     frame = hw_downloaded_frame;
                 }
 
-
-                sws_ctx = sws_getCachedContext(sws_ctx, frame->width, frame->height, (AVPixelFormat)frame->format, out_width, out_height, out_pix_fmt, SWS_BILINEAR, nullptr, nullptr, nullptr);
-                
-                AVFrame *out_frame = av_frame_alloc();
-                out_frame->format = out_pix_fmt;
-                out_frame->width = out_width;
-                out_frame->height = out_height;
-                out_frame->pts = frame->pts;
-                av_frame_get_buffer(out_frame, 0);
-                
-                int ret = sws_scale(sws_ctx, (const uint8_t* const*)frame->data, frame->linesize, 0, frame->height, out_frame->data, out_frame->linesize);
-                if (ret > 0)
+                if(frame->format == AV_PIX_FMT_YUV420P||frame->format == AV_PIX_FMT_NV12)
                 {
-                    state->video_frame_queue.push(out_frame);
+                    state->video_frame_queue.push(av_frame_clone(frame));
                 }
-                else
-                {
-                    av_frame_free(&out_frame);
+                else {
+                    sws_ctx = sws_getCachedContext(sws_ctx, frame->width, frame->height, (AVPixelFormat)frame->format, out_width, out_height, out_pix_fmt, SWS_BILINEAR, nullptr, nullptr, nullptr);
+                    
+                    AVFrame *out_frame = av_frame_alloc();
+                    out_frame->format = out_pix_fmt;
+                    out_frame->width = out_width;
+                    out_frame->height = out_height;
+                    out_frame->pts = frame->pts;
+                    av_frame_get_buffer(out_frame, 0);
+                    
+                    int ret = sws_scale(sws_ctx, (const uint8_t* const*)frame->data, frame->linesize, 0, frame->height, out_frame->data, out_frame->linesize);
+                    if (ret > 0)
+                    {
+                        state->video_frame_queue.push(out_frame);
+                    }
+                    else
+                    {
+                        av_frame_free(&out_frame);
+                    }
                 }
                 if(hw_downloaded_frame)
                 {
