@@ -131,7 +131,7 @@ void AudioFilter::set_speed(double speed)
 
     char speed_str[32];
     snprintf(speed_str, sizeof(speed_str), "%.2f", speed);
-
+    
     // 给名为 "atempo_filter" 的节点发送 "tempo" 指令，瞬间变道！
     avfilter_graph_send_command(graph, "atempo_filter", "tempo", speed_str, NULL, 0, AVFILTER_CMD_FLAG_ONE);
 }

@@ -33,14 +33,16 @@ void AudioDecoder::decode_thread_loop()
         }
         pkt = state->audio_pkt_queue.pop();
         if (!pkt) break;
+
+        //如果当前pkt时哨兵包,则执行队列冲刷
         if(pkt->data && pkt->size==5&&std::string((char*)pkt->data,5)=="FLUSH")
         {
-            avcodec_flush_buffers(codec_ctx);
+            avcodec_flush_buffers(codec_ctx);//音频数据分块,buffer也要冲刷
             state->audio_frame_queue.flush([](AVFrame* &f){
                 av_frame_free(&f);
             });
             filter.flush(codec_ctx, state->audio_time_base);
-            state->audio_decoder_serial = state->global_seek_serial.load();
+            state->audio_decoder_serial = state->global_seek_serial.load();//音频序列跟进全局序列
             current_source_sec = -1.0;
             av_packet_free(&pkt);
             continue;
@@ -82,7 +84,7 @@ void AudioDecoder::resample_and_push(AVFrame *in_frame)
     av_channel_layout_default(&out_frame->ch_layout, 2);
     out_frame->sample_rate = 44100;
 
-    // 重大修复：基于实际消耗的源时长完美投影正确的 PTS
+    // 基于实际消耗的源时长完美投影正确的 PTS
     if (current_source_sec >= 0) {
         // 输出帧被挂载上理论上绝对正确的源时间刻度
         out_frame->pts = current_source_sec / av_q2d(state->audio_time_base);

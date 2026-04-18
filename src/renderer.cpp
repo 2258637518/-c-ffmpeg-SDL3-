@@ -37,10 +37,13 @@ Renderer::~Renderer()
 }
 bool Renderer::init()
 {
+    //启动SDL视频和音频渲染模块
     if(!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO))
     {
         return false;
     }
+
+    //预设的窗口大小
     int window_w = 1600;
     int window_h = 900;
     
@@ -59,7 +62,7 @@ bool Renderer::init()
     
     return true;
 }
-void Renderer::render_video(double current_audio_delay)
+void Renderer::render_video(double current_audio_delay)//关键部分:根据各种条件控制视频帧的渲染
 {
     if(!pending_video_frame)
     {
@@ -94,8 +97,9 @@ void Renderer::render_video(double current_audio_delay)
     double logical_audio_pts=state->audio_clock.get_clock(current_speed);
     // 扣除硬件延迟时，必须考虑真实的物理延迟转为逻辑资源的时间
     double real_audio_pts = logical_audio_pts - current_audio_delay * current_speed + user_provide_pts;
+
+    //根据真实差值由decision做决策
     SyncDecision decision = sync_manager.decide_video_frame(video_pts, real_audio_pts);
-    
     if(decision.action == SyncAction::Wait)
     {
         SDL_Delay(1);
@@ -107,6 +111,7 @@ void Renderer::render_video(double current_audio_delay)
         pending_video_frame = nullptr;
         return;
     }
+    //仅在第一次或者视频帧的格式变化后才进行texture的创建
     if(need_change(pending_video_frame))
     {
         texture = SDL_CreateTexture(renderer, target_sdl_fmt, SDL_TEXTUREACCESS_STREAMING, pending_video_frame->width, pending_video_frame->height);
@@ -118,6 +123,8 @@ void Renderer::render_video(double current_audio_delay)
             return;
         }
     }
+
+    //根据不同的格式选择不同的texture更新方式
     if(pending_video_frame->format==AV_PIX_FMT_YUV420P)
     {
         SDL_UpdateYUVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1],pending_video_frame->linesize[1] ,pending_video_frame->data[2] ,pending_video_frame->linesize[2] );
@@ -126,6 +133,8 @@ void Renderer::render_video(double current_audio_delay)
     {
         SDL_UpdateNVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1], pending_video_frame->linesize[1]);
     }
+
+    //在拉伸窗口的过程中保持视频画面的协调
     int win_w,win_h;
     SDL_GetRenderOutputSize(renderer,&win_w,&win_h);
     int frame_w = pending_video_frame->width;
@@ -158,7 +167,7 @@ void Renderer::close()
     if(window) { SDL_DestroyWindow(this->window); this->window = nullptr; }
     SDL_Quit();
 }
-bool Renderer::should_quit()
+bool Renderer::should_quit()//控制程序结束以及事件判断
 {
     SDL_Event event;
     while(SDL_PollEvent(&event))
@@ -167,8 +176,9 @@ bool Renderer::should_quit()
         {
             return true;
         }
-        else if(event.type == SDL_EVENT_KEY_DOWN)
+        else if(event.type == SDL_EVENT_KEY_DOWN)//按键事件
         {
+            //允许手动调整音视频延迟
             if (event.key.key == SDLK_J) {
                 user_provide_pts -= 0.05; 
             }
@@ -206,6 +216,7 @@ bool Renderer::should_quit()
                 if(debounce_target_pos < 0) debounce_target_pos = 0;
                 last_keypress_time = SDL_GetTicks();
             }
+            //设置音量,映射在0-100的范围内
             else if(event.key.key == SDLK_UP)
             {
                 state->audio_volume +=5;
@@ -233,6 +244,7 @@ bool Renderer::should_quit()
                 }
                 std::cout<<"当前音量:"<<state->audio_volume<<"%"<<std::endl;
             }
+            //设置视频播放倍速
             else if(event.key.key == SDLK_LEFTBRACKET)
             {
                 double cur = state->player_speed.load();
@@ -244,7 +256,7 @@ bool Renderer::should_quit()
                 state->player_speed.store(cur+0.5);
             }
         }
-        else if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+        else if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)//根据鼠标指针位置进行进度条跳跃
         {
             int w,h;
             SDL_GetWindowSize(window, &w, &h);
@@ -259,7 +271,7 @@ bool Renderer::should_quit()
             }
         }
     }
-    if (is_debouncing && (SDL_GetTicks() - last_keypress_time > 200)) 
+    if (is_debouncing && (SDL_GetTicks() - last_keypress_time > 200)) //引入延迟判断机制,不必时刻判断快进/快退
     {
     execute_seek(debounce_target_pos);
     is_debouncing = false;
@@ -268,6 +280,7 @@ bool Renderer::should_quit()
 }
 void Renderer::execute_seek(int64_t target_pos)
 {
+    //全局序列++,音频和视频序列等待冲刷完成后再自行++
     state->global_seek_serial++;
     double target_sec = (double)target_pos / AV_TIME_BASE;
 
@@ -288,7 +301,7 @@ void Renderer::execute_seek(int64_t target_pos)
         pending_video_frame = nullptr;
     }
 }
-void Renderer::draw_progress_bar()
+void Renderer::draw_progress_bar()//画进度条
 {
     int w,h;
     SDL_GetRenderOutputSize(renderer, &w, &h);
@@ -306,7 +319,7 @@ void Renderer::draw_progress_bar()
     SDL_SetRenderDrawColor(renderer, 255, 100, 100, 255);
     SDL_RenderFillRect(renderer, &fg_rect);
 }
-bool Renderer::need_change(AVFrame *pending_video_frame)
+bool Renderer::need_change(AVFrame *pending_video_frame)//根据不同的格式创建不同的texture
 {
     if (pending_video_frame->format == AV_PIX_FMT_YUV420P) {
         target_sdl_fmt = SDL_PIXELFORMAT_IYUV;

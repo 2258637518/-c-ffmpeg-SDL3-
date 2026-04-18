@@ -86,7 +86,7 @@ void AudioOutput::feed_audio_loop()
             last_volume = current_volume; // 更新记忆册
         }
         //清空队列
-        if(state->audio_need_clear.exchange(false))
+        if(state->audio_need_clear.exchange(false))//exchange先观察原子变量的值后再更改为设定值
         {
             if(audio_stream)
             {
@@ -110,6 +110,7 @@ void AudioOutput::feed_audio_loop()
         }
         AVFrame *frame=state->audio_frame_queue.pop();
         if(!frame)continue;
+        //如果当前frame的序列和全局序列不相符则丢弃
         if (state->global_seek_serial.load() != state->audio_decoder_serial.load()) {
             av_frame_free(&frame);
             continue;
@@ -133,7 +134,7 @@ void AudioOutput::feed_audio_loop()
         av_frame_free(&frame);
     }
 }
-double AudioOutput::get_audio_delay()
+double AudioOutput::get_audio_delay()//获取音频缓冲区剩余播放时长,用于修正视频帧的pts
 {
     int queued_bytes=SDL_GetAudioStreamQueued(audio_stream);
     return (double)queued_bytes/352800.0;

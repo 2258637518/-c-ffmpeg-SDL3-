@@ -10,7 +10,7 @@ bool Player::sdl_event_watch(void* userdata, SDL_Event* event) {
         
         Player* player = static_cast<Player*>(userdata);
         if (player && player->started && !player->quit && player->state.state == PlayState::PLAYING) {
-            // 系统正在阻塞主线程处理拖拽，我们强插一帧渲染
+            // 系统正在阻塞主线程处理拖拽，强插一帧渲染来优化拖拽时的卡顿现象
             double hw_delay = player->audio_output.get_audio_delay();
             player->renderer.render_video(hw_delay);
         }
@@ -54,7 +54,7 @@ bool Player::open()
     }
 
     
-    SDL_AddEventWatch(sdl_event_watch, this);
+    SDL_AddEventWatch(sdl_event_watch, this);//回调函数,让画面保持更新
     
     state.state = PlayState::STOPPED;
     opened = true;

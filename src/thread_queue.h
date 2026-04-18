@@ -7,6 +7,7 @@ extern "C"
 {
 #include <libavutil/mem.h>
 }
+//使用模板应对不同但相似的ffmpeg数据结构
 template <typename T>
 class ThreadQueue
 {
@@ -17,7 +18,7 @@ private:
     bool abort_request = false;
 
 public:
-    void abort()
+    void abort()//打断线程的休眠
     {
         std::lock_guard<std::mutex> lock(mtx);
         abort_request = true;
@@ -41,7 +42,7 @@ public:
         q.pop();
         return t;
     }
-    void clear()
+    void clear()//使用av_free安全的释放队列中的数据
     {
         std::lock_guard<std::mutex> lock(mtx);
         while(!q.empty())
@@ -51,7 +52,7 @@ public:
             q.pop();
         }
     }
-    void flush(std::function<void(T&)> deleter)
+    void flush(std::function<void(T&)> deleter)//使用回调函数对不同的数据类型调用不同的内存释放函数
     {
         std::lock_guard<std::mutex> lock(mtx);
         while(!q.empty())

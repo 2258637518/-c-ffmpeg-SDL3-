@@ -98,7 +98,8 @@ Demuxer::~Demuxer()
     }
 }
 
-void Demuxer::read_thread_loop()
+//包装函数应该和业务函数分离,或者使用面向对象封装,或者使用c++20新特性jthread
+void Demuxer::read_thread_loop()//违反单一职责原则,可读性差,扩展性差
 {
     while(running)
     {
@@ -106,8 +107,9 @@ void Demuxer::read_thread_loop()
         if(state->seek_req.load())
         {
             int64_t seek_target=state->seek_pos.load();
-            avformat_seek_file(state->fmt_ctx, -1, INT64_MIN,seek_target, INT64_MAX, AVSEEK_FLAG_BACKWARD);
-            state->seek_req.store(false);
+            avformat_seek_file(state->fmt_ctx, -1, INT64_MIN,seek_target, INT64_MAX, AVSEEK_FLAG_BACKWARD);//寻找最近的关键帧
+            state->seek_req.store(false);//设置回seek请求为false
+            //清空当前已解码的队列
             state->video_pkt_queue.flush([](AVPacket* &pkt){
                 av_packet_free(&pkt);
             });
@@ -115,6 +117,7 @@ void Demuxer::read_thread_loop()
                 av_packet_free(&pkt);
             });
             
+            //发送哨兵包进入队列
             AVPacket *video_flush_pkt = av_packet_alloc();
             video_flush_pkt->data = (uint8_t*)"FLUSH";
             video_flush_pkt->size = 5;
@@ -129,6 +132,7 @@ void Demuxer::read_thread_loop()
         AVPacket *pkt = av_packet_alloc();
         if(av_read_frame(state->fmt_ctx, pkt)>=0)
         {
+            //根据当前packet的流分配给不同的队列
             if(pkt->stream_index==state->video_stream_idx)
             {
                 while(state->video_pkt_queue.size()>=75&&running)

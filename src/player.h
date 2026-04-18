@@ -16,7 +16,7 @@ public:
     void tick();
     void stop();
 
-    bool should_quit();
+    bool should_quit();//判断程序是否应该停止
 
     static bool sdl_event_watch(void* userdata, union SDL_Event* event);
 
