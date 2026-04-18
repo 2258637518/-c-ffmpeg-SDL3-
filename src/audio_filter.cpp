@@ -57,8 +57,11 @@ bool AudioFilter::init(AVCodecContext* dec_ctx, AVRational time_base) {
     // 配置变速滤镜 (atempo)
     // ==========================================
     AVFilterContext *atempo_ctx;
-    // 第四个参数 "1.0" 是初始倍速
-    ret = avfilter_graph_create_filter(&atempo_ctx, atempo, "atempo_filter", "1.0", NULL, graph);
+    // 使用类内记忆的 current_speed 作为初始倍速，防止 Seek 触发 flush 重建滤镜网时，状态发生断层
+    char speed_args[32];
+    snprintf(speed_args, sizeof(speed_args), "%.2f", current_speed);
+    
+    ret = avfilter_graph_create_filter(&atempo_ctx, atempo, "atempo_filter", speed_args, NULL, graph);
     if (ret < 0) {
         return false;
     }

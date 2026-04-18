@@ -27,7 +27,7 @@ void AudioDecoder::decode_thread_loop()
     AVPacket *pkt = nullptr;
     while (running)
     {
-        while (state->audio_frame_queue.size() >= 75 && running)
+        while (state->audio_frame_queue.size() >= 15 && running)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
