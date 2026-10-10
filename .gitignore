@@ -14,4 +14,9 @@ out/
 # 忽略 clangd 代码提示的缓存文件夹
 .cache/
 
+# 忽略 Visual Studio 本地缓存
+.vs/
+*.user
+*.suo
+
 ffmpeg_learn03_rules.md

@@ -23,8 +23,8 @@ Renderer::Renderer(MediaState *state)
 {
     this->state=state;
     this->window=nullptr;
-    this->renderer=nullptr;
-    this->texture=nullptr;
+    this->gl_ctx = nullptr;
+    this->modern_render = nullptr;
     this->keepRunning=false;
     this->user_provide_pts=-0.08;
     this->is_debouncing = false;
@@ -43,22 +43,48 @@ bool Renderer::init()
         return false;
     }
 
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
     //预设的窗口大小
     int window_w = 1600;
     int window_h = 900;
     
-    this->window=SDL_CreateWindow("my_video_player", window_w, window_h, SDL_WINDOW_RESIZABLE);
+    this->window = SDL_CreateWindow("my_video_player", window_w, window_h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if(!window)
     {
         this->close();
         return false;
     }
-    this->renderer=SDL_CreateRenderer(this->window, NULL);
-    if(!renderer)
+
+    this->gl_ctx = SDL_GL_CreateContext(window);
+    if(!gl_ctx)
     {
+        std::cerr << "gl_ctx创建失败";
         this->close();
         return false;
     }
+    SDL_GL_MakeCurrent(this->window, this->gl_ctx);
+
+    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
+        std::cerr << "Failed to initialize Glad in SDL context!" << std::endl;
+        this->close();
+        return false;
+    }
+
+    this->modern_render = std::make_unique<ModernRender>();
+    if (!this->modern_render->Init()) {
+        std::cerr << "ModernRender创建失败" << std::endl;
+        this->close();
+        return false;
+    }
+
+    this->modern_render->Resize(window_w, window_h);
+
+    // 开启垂直同步（防止画面撕裂）
+    SDL_GL_SetSwapInterval(1);
     
     return true;
 }
@@ -111,47 +137,15 @@ void Renderer::render_video(double current_audio_delay)//关键部分:根据各�
         pending_video_frame = nullptr;
         return;
     }
-    //仅在第一次或者视频帧的格式变化后才进行texture的创建
-    if(need_change(pending_video_frame))
-    {
-        texture = SDL_CreateTexture(renderer, target_sdl_fmt, SDL_TEXTUREACCESS_STREAMING, pending_video_frame->width, pending_video_frame->height);
-        current_tex_w = pending_video_frame->width;
-        current_tex_h = pending_video_frame->height;
-        current_tex_fmt = target_sdl_fmt;
-        if(!texture)
-        {
-            return;
-        }
-    }
 
-    //根据不同的格式选择不同的texture更新方式
-    if(pending_video_frame->format==AV_PIX_FMT_YUV420P)
+    if (this->modern_render)
     {
-        SDL_UpdateYUVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1],pending_video_frame->linesize[1] ,pending_video_frame->data[2] ,pending_video_frame->linesize[2] );
+        modern_render->RenderFrame(pending_video_frame);
     }
-    else if(pending_video_frame->format==AV_PIX_FMT_NV12)
-    {
-        SDL_UpdateNVTexture(texture, NULL, pending_video_frame->data[0], pending_video_frame->linesize[0], pending_video_frame->data[1], pending_video_frame->linesize[1]);
-    }
-
-    //在拉伸窗口的过程中保持视频画面的协调
-    int win_w,win_h;
-    SDL_GetRenderOutputSize(renderer,&win_w,&win_h);
-    int frame_w = pending_video_frame->width;
-    int frame_h = pending_video_frame->height;
-    float scale_x = (float)win_w/(float)frame_w;
-    float scale_y = (float)win_h/(float)frame_h;
-    float scale = (scale_x<scale_y)?scale_x:scale_y;
-    float dest_w = frame_w*scale;
-    float dest_h = frame_h*scale;
-    float dest_x = (win_w - dest_w)/2.0f;
-    float dest_y = (win_h - dest_h)/2.0f;
-    SDL_FRect dest_rect = {dest_x,dest_y,dest_w,dest_h};
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 100);
-    SDL_RenderClear(renderer);
-    SDL_RenderTexture(renderer, texture, NULL, &dest_rect);
     draw_progress_bar();
-    SDL_RenderPresent(renderer);
+
+    SDL_GL_SwapWindow(this->window);
+
     av_frame_free(&pending_video_frame);
     pending_video_frame = nullptr;
 }
@@ -162,8 +156,8 @@ void Renderer::close()
         keepRunning=false;
     }
     if(pending_video_frame) { av_frame_free(&pending_video_frame); pending_video_frame = nullptr; }
-    if(texture) { SDL_DestroyTexture(this->texture); this->texture = nullptr; }
-    if(renderer) { SDL_DestroyRenderer(this->renderer); this->renderer = nullptr; }
+    if (modern_render) { this->modern_render.reset();}
+    if (gl_ctx) { SDL_GL_DestroyContext(this->gl_ctx); this->gl_ctx = nullptr; }
     if(window) { SDL_DestroyWindow(this->window); this->window = nullptr; }
     SDL_Quit();
 }
@@ -270,6 +264,13 @@ bool Renderer::should_quit()//控制程序结束以及事件判断
                 }
             }
         }
+        else if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+        {
+            int new_w = 0;
+            int new_h = 0;
+            SDL_GetWindowSize(window, &new_w, &new_h);
+            this->on_window_resized(new_w,new_h);
+        }
     }
     if (is_debouncing && (SDL_GetTicks() - last_keypress_time > 200)) //引入延迟判断机制,不必时刻判断快进/快退
     {
@@ -277,6 +278,13 @@ bool Renderer::should_quit()//控制程序结束以及事件判断
     is_debouncing = false;
     }
     return false;
+}
+void Renderer::on_window_resized(int w,int h)
+{
+    if (modern_render)
+    {
+        modern_render->Resize(w, h);
+    }
 }
 void Renderer::execute_seek(int64_t target_pos)
 {
@@ -303,40 +311,39 @@ void Renderer::execute_seek(int64_t target_pos)
 }
 void Renderer::draw_progress_bar()//画进度条
 {
-    int w,h;
-    SDL_GetRenderOutputSize(renderer, &w, &h);
-    SDL_FRect bg_rect = {0.0f,(float)(h-30),(float)w,30.0f};
-    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 180);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND); 
-    SDL_RenderFillRect(renderer, &bg_rect);
+    if (!this->window || !state->fmt_ctx || state->fmt_ctx->duration <= 0) {
+        return;
+    }
 
-    double duration_sec = (double)state->fmt_ctx->duration/AV_TIME_BASE;
-    double current_sec = is_debouncing 
-            ? ((double)debounce_target_pos / AV_TIME_BASE) 
-            : state->audio_clock.get_clock();
-    float progress = (float)((current_sec/duration_sec)*w);
-    SDL_FRect fg_rect = {0.0f,(float)(h-30),progress,30.0f};
-    SDL_SetRenderDrawColor(renderer, 255, 100, 100, 255);
-    SDL_RenderFillRect(renderer, &fg_rect);
-}
-bool Renderer::need_change(AVFrame *pending_video_frame)//根据不同的格式创建不同的texture
-{
-    if (pending_video_frame->format == AV_PIX_FMT_YUV420P) {
-        target_sdl_fmt = SDL_PIXELFORMAT_IYUV;
-    } 
-    else if (pending_video_frame->format == AV_PIX_FMT_NV12) {
-        target_sdl_fmt = SDL_PIXELFORMAT_NV12;
+    // 1. 获取窗口的实际像素大小（适配高分屏）
+    int win_w = 0, win_h = 0;
+    SDL_GetWindowSizeInPixels(this->window, &win_w, &win_h);
+    if (win_w <= 0 || win_h <= 0) return;
+
+    double duration_sec = (double)state->fmt_ctx->duration / AV_TIME_BASE;
+    double current_sec = is_debouncing
+        ? ((double)debounce_target_pos / AV_TIME_BASE)
+        : state->audio_clock.get_clock();
+
+    if (current_sec < 0.0) current_sec = 0.0;
+    if (current_sec > duration_sec) current_sec = duration_sec;
+
+    float progress_ratio = static_cast<float>(current_sec / duration_sec);
+    int progress_w = static_cast<int>(progress_ratio * win_w);
+
+    const int bar_h = 10;
+
+    glEnable(GL_SCISSOR_TEST);
+
+    glScissor(0, 0, win_w, bar_h);
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    if (progress_w > 0) {
+        glScissor(0, 0, progress_w, bar_h);
+        glClearColor(1.0f, 0.25f, 0.25f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
     }
-    if(texture==nullptr
-        ||current_tex_w != pending_video_frame->width
-        ||current_tex_h!=pending_video_frame->height
-        ||current_tex_fmt!=target_sdl_fmt)
-    {
-        if(texture!=NULL)
-        {
-            SDL_DestroyTexture(texture);
-        }
-        return true;
-    }
-    return false;
+
+    glDisable(GL_SCISSOR_TEST);
 }

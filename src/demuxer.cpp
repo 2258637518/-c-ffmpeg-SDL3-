@@ -21,9 +21,15 @@ Demuxer::Demuxer(MediaState *state)
 bool Demuxer::open()
 {
     int ret =0;
+    //av_log_set_level(AV_LOG_DEBUG);
     ret = avformat_open_input(&state->fmt_ctx ,state->filename.c_str(), NULL,NULL);
     if(ret<0)
     {
+       /* char errbuf[128];
+        av_strerror(ret, errbuf, sizeof(errbuf));
+        fprintf(stderr, "open_input failed: %s (%d), fmt_ctx=%p, file=%s\n",
+            errbuf, ret, (void*)state->fmt_ctx, state->filename.c_str());*/
+
         avformat_close_input(&state->fmt_ctx);
          return false;
     }
@@ -55,7 +61,7 @@ void Demuxer::print_metadata()
     std::cout<<"时长:"<<state->fmt_ctx->duration/AV_TIME_BASE<<"秒"<<std::endl;
     std::cout<<"码率:"<<state->fmt_ctx->bit_rate/1000<<"kbps"<<std::endl;
     std::cout<<"流个数:"<<state->fmt_ctx->nb_streams<<std::endl;
-    for(uint i=0;i<state->fmt_ctx->nb_streams;i++)
+    for(unsigned int i=0;i<state->fmt_ctx->nb_streams;i++)
     {
         AVStream *stream=state->fmt_ctx->streams[i];
         AVCodecParameters *codec_par=stream->codecpar;

@@ -1,4 +1,5 @@
 #pragma once 
+#include <glad/glad.h>
 #include "media_state.h"
 #include "syncmanager.h"
 #include <SDL3/SDL.h>
@@ -9,12 +10,17 @@
 #include <cstdint>
 #include <thread>
 #include <atomic>
+#include "render/modern_render.h"
+#include <memory>
+
 class Renderer{
 private:
     MediaState *state;
     SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_Texture *texture;
+
+    SDL_GLContext gl_ctx;
+    std::unique_ptr<ModernRender> modern_render;
+
     AVFrame *pending_video_frame = nullptr;
     SyncManager sync_manager;
     std::atomic<bool> keepRunning;
@@ -24,10 +30,7 @@ private:
     bool is_debouncing;
     int64_t debounce_target_pos;
     uint64_t last_keypress_time;
-    int current_tex_w = 0;
-    int current_tex_h = 0;
-    SDL_PixelFormat current_tex_fmt = SDL_PIXELFORMAT_UNKNOWN;
-    SDL_PixelFormat target_sdl_fmt = SDL_PIXELFORMAT_UNKNOWN;
+
 public:
     Renderer(MediaState *state);
     ~Renderer();
@@ -36,5 +39,6 @@ public:
     void render_video(double hw_delay);
     void close();
     bool should_quit();
-    bool need_change(AVFrame *pending_video_frame);
+    void on_window_resized(int w,int h);
+
 };

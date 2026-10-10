@@ -1,39 +1,39 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
-# 定义项目名称和支持的语言
-project(MyUniversalPlayer VERSION 1.0 LANGUAGES CXX)
+# 定义项目名称和支持的语言（启用 C 和 CXX 以支持 glad.c）
+project(MyUniversalPlayer VERSION 1.0 LANGUAGES C CXX)
 
 # 设置 C++ 标准为 C++17，支持更现代的多线程和智能指针特性
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# ==========================================
-# 1. 查找依赖库：FFmpeg
-# ==========================================
-# 在 Linux 环境下，强烈建议使用 pkg-config 查找 FFmpeg
-find_package(PkgConfig REQUIRED)
-
-# 查找我们需要的 FFmpeg 组件，并生成 IMPORTED_TARGET
-pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
-    libavformat
-    libavcodec
-    libavutil
-    libswscale    # 用于视频像素格式转换
-    libswresample # 用于音频重采样
-    libavfilter   # 用于引入我们新加入的滤镜库
-)
+# MSVC 全局编码配置：统一源码字符集与执行字符集为 UTF-8
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
 
 # ==========================================
-# 2. 查找依赖库：SDL3
+# 1. 查找依赖库：FFmpeg (本地 SDK: G:/SDKs/ffmpeg)
 # ==========================================
-# 查找 SDL3。如果你是自己编译安装的 SDL3，CMake 通常能自动在 /usr/local 找到它
-find_package(SDL3 REQUIRED)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(FFMPEG REQUIRED)
 
 # ==========================================
-# 3. 定义源文件
+# 2. 查找依赖库：SDL3 (本地 Windows MSVC SDK: G:/SDKs/SDL3)
 # ==========================================
-# 注意：thread_queue.h 通常是模板类，只需在头文件中实现，不需要对应的 .cpp
+set(SDL3_DIR "G:/SDKs/SDL3/cmake" CACHE PATH "Path to SDL3 CMake config" FORCE)
+find_package(SDL3 REQUIRED CONFIG)
+
+# ==========================================
+# 3. 构建 Glad 静态库
+# ==========================================
+add_library(glad STATIC third_party/glad/src/glad.c "src/paser/h264_paser.h" )
+target_include_directories(glad PUBLIC third_party/glad/include)
+
+# ==========================================
+# 4. 定义源文件
+# ==========================================
 set(SOURCES
     src/main.cpp
     src/media_state.cpp
@@ -43,32 +43,38 @@ set(SOURCES
     src/audio_decoder.cpp
     src/audio_filter.cpp
     src/renderer.cpp
+    src/render/modern_render.cpp
     src/audio_output.cpp
     src/syncmanager.cpp
     src/player.cpp
 )
 
-# 全局添加宏定义（写在 add_executable 之前）
+# 全局添加宏定义
 add_definitions(-D__STDC_CONSTANT_MACROS)
 
 # ==========================================
-# 4. 创建可执行文件并链接
+# 5. 创建可执行文件并链接
 # ==========================================
+add_executable(${PROJECT_NAME} ${SOURCES} "src/paser/h264_paser.h" )
 
-add_executable(${PROJECT_NAME} ${SOURCES})
-
-# 指定头文件搜索路径，这样在代码里可以直接 #include "media_state.h"
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# 指定头文件搜索路径
+target_include_directories(${PROJECT_NAME} PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glad/include
+    ${FFMPEG_INCLUDE_DIRS}
+)
 
 # 链接所有的库
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    PkgConfig::FFMPEG  # 链接 FFmpeg
-    SDL3::SDL3         # 链接 SDL3
-    pthread            # Linux 下使用 std::thread 需要显式链接 pthread
-    m                  # 链接数学库
+    glad
+    SDL3::SDL3
+    ${FFMPEG_LIBRARIES}
+    opengl32
 )
 
-# （可选）开启更多的编译警告，帮助提前发现潜在的 Bug
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
-
-
+# 自动将运行时动态链接库拷贝到可执行文件所在目录，避免运行时缺 DLL
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "G:/SDKs/SDL3/lib/x64/SDL3.dll"
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>
+)

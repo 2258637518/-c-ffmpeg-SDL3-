@@ -1,4 +1,5 @@
 #include "audio_filter.h"
+#include <cmath>
 extern "C"{
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
@@ -69,16 +70,21 @@ bool AudioFilter::init(AVCodecContext* dec_ctx, AVRational time_base) {
     // ==========================================
     // 配置出口 (abuffersink)
     // ==========================================
-    ret = avfilter_graph_create_filter(&sink_ctx, abuffersink, "out", NULL, NULL, graph);
+    // 1. 分配出口节点（先不执行初始化，才能在初始化前配置参数）
+    sink_ctx = avfilter_graph_alloc_filter(graph, abuffersink, "out");
+    if (!sink_ctx) return false;
+
+    // 2. 约束输出格式与采样率：使用 FFmpeg 现代主流的 av_opt_set_array API
+    // 确保滤镜出口与解码器及下游重采样器保持一致
+    enum AVSampleFormat out_sample_fmts[] = { dec_ctx->sample_fmt };
+    av_opt_set_array(sink_ctx, "sample_formats", AV_OPT_SEARCH_CHILDREN, 0, 1, AV_OPT_TYPE_SAMPLE_FMT, out_sample_fmts);
+
+    int out_sample_rates[] = { dec_ctx->sample_rate };
+    av_opt_set_array(sink_ctx, "samplerates", AV_OPT_SEARCH_CHILDREN, 0, 1, AV_OPT_TYPE_INT, out_sample_rates);
+
+    // 3. 正式完成出口节点初始化
+    ret = avfilter_init_str(sink_ctx, NULL);
     if (ret < 0) return false;
-
-    // 【超级重要】：强制 abuffersink 只能输出和重采样器 swr_ctx 完全一致的格式和采样率！
-    // 否则滤镜网如果在内部协商成了 Interleaved (交错) 格式，喂给原本配成 Planar (平面) 的 swr 会导致空指针越界崩溃
-    enum AVSampleFormat out_sample_fmts[] = { dec_ctx->sample_fmt, AV_SAMPLE_FMT_NONE };
-    av_opt_set_int_list(sink_ctx, "sample_fmts", out_sample_fmts, AV_SAMPLE_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
-
-    int out_sample_rates[] = { dec_ctx->sample_rate, -1 };
-    av_opt_set_int_list(sink_ctx, "sample_rates", out_sample_rates, -1, AV_OPT_SEARCH_CHILDREN);
 
     // ==========================================
     // 用水管把它们连接起来: in -> atempo -> out
